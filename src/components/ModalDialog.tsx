@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Share, PlusSquare, Smartphone } from 'lucide-react';
-import { MealCategory, MealItem, WorkoutDay, WorkoutExercise } from '@/types/fitlife';
+import { X, Share, PlusSquare, Smartphone, UserPlus, Users, Trash2, Check } from 'lucide-react';
+import { FitLifeState, Gender, Goal, MealCategory, MealItem, WorkoutDay, WorkoutExercise } from '@/types/fitlife';
 import { MEAL_CATEGORIES } from '@/lib/meals-data';
 import { THAI_WEEKDAYS, createWorkoutDayFromTemplate } from '@/lib/workouts-data';
-import { toSafePositive } from '@/lib/nutrition';
+import { AVATAR_OPTIONS, GOAL_OPTIONS, calculateBmi, toSafePositive } from '@/lib/nutrition';
 
 interface ModalShellProps {
   title: string;
@@ -970,6 +970,367 @@ export function ScheduleSetupModal({
             บันทึกตารางวันฝึก
           </button>
         </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+interface ProfileManagerModalProps {
+  currentState: FitLifeState;
+  savedProfiles: FitLifeState[];
+  supabaseReady: boolean;
+  onSwitchProfile: (syncCode: string) => void;
+  onDeleteProfile: (syncCode: string) => void;
+  onCreateProfile: (data: {
+    name: string;
+    avatar: string;
+    gender: Gender;
+    age: number;
+    height: number;
+    weight: number;
+    goal: Goal;
+  }) => void;
+  onLoadBySyncCode: (code: string) => Promise<boolean>;
+  onClose: () => void;
+}
+
+export function ProfileManagerModal({
+  currentState,
+  savedProfiles,
+  supabaseReady,
+  onSwitchProfile,
+  onDeleteProfile,
+  onCreateProfile,
+  onLoadBySyncCode,
+  onClose,
+}: ProfileManagerModalProps) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState('');
+  const [avatar, setAvatar] = useState<string>('💪');
+  const [gender, setGender] = useState<Gender>('male');
+  const [age, setAge] = useState('25');
+  const [height, setHeight] = useState('170');
+  const [weight, setWeight] = useState('68');
+  const [goal, setGoal] = useState<Goal>('lose');
+  const [importCode, setImportCode] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onCreateProfile({
+      name: name.trim() || 'ผู้ใช้ใหม่',
+      avatar,
+      gender,
+      age: Math.max(10, Math.round(Number(age) || 25)),
+      height: Math.max(100, Number(height) || 170),
+      weight: Math.max(25, Number(weight) || 68),
+      goal,
+    });
+    onClose();
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importCode.trim()) return;
+    setImporting(true);
+    try {
+      const ok = await onLoadBySyncCode(importCode.trim());
+      if (ok) {
+        setImportCode('');
+        onClose();
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const orderedProfiles = [
+    currentState,
+    ...savedProfiles.filter((p) => p.syncCode !== currentState.syncCode),
+  ];
+
+  return (
+    <ModalShell title="👥 โปรไฟล์ผู้ใช้ (User Profiles)" onClose={onClose}>
+      <div className="space-y-4">
+        {!showCreate ? (
+          <>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                โปรไฟล์ที่บันทึกไว้ ({orderedProfiles.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="touch-target px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ สร้างโปรไฟล์ใหม่</span>
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+              {orderedProfiles.map((prof) => {
+                const isActive = prof.syncCode === currentState.syncCode;
+                const goalObj =
+                  GOAL_OPTIONS.find((g) => g.id === prof.profile.goal) || GOAL_OPTIONS[0];
+                const bmiInfo = calculateBmi(prof.profile.weight, prof.profile.height);
+                return (
+                  <div
+                    key={prof.syncCode}
+                    className={`rounded-2xl p-3 border flex items-center justify-between gap-2.5 transition-colors ${
+                      isActive
+                        ? 'bg-emerald-50/80 dark:bg-emerald-500/15 border-emerald-400 dark:border-emerald-600'
+                        : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xl shrink-0">
+                        {prof.profile.avatar || (prof.profile.gender === 'female' ? '🌸' : '💪')}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-display font-bold text-sm text-slate-900 dark:text-white truncate">
+                            {prof.profile.name.trim() || 'ผู้ใช้ทั่วไป'}
+                          </span>
+                          {isActive && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold shrink-0">
+                              กำลังใช้
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate tabular-nums">
+                          {prof.profile.weight || '-'} กก. • {goalObj.short}
+                          {bmiInfo ? ` • BMI ${bmiInfo.bmi}` : ''} • 🔥 {prof.workoutStreak || 0}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                          {prof.syncCode}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!isActive && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSwitchProfile(prof.syncCode);
+                              onClose();
+                            }}
+                            className="touch-target px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>สลับใช้</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteProfile(prof.syncCode)}
+                            className="w-10 h-10 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/15 flex items-center justify-center"
+                            aria-label="ลบโปรไฟล์นี้"
+                            title="ลบโปรไฟล์ออกจากเครื่อง"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {supabaseReady && (
+              <form
+                onSubmit={handleImportSubmit}
+                className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2"
+              >
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  นำเข้าโปรไฟล์จากเครื่องอื่นด้วย Sync Code
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={importCode}
+                    onChange={(e) => setImportCode(e.target.value.toUpperCase())}
+                    placeholder="FIT-XXXX-XXXX"
+                    className="touch-target flex-1 min-w-0 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm uppercase"
+                  />
+                  <button
+                    type="submit"
+                    disabled={importing || !importCode.trim()}
+                    className="touch-target px-3.5 py-1.5 rounded-xl bg-slate-900 dark:bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50 shrink-0"
+                  >
+                    {importing ? 'กำลังโหลด...' : 'นำเข้า'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        ) : (
+          <form onSubmit={handleCreateSubmit} className="space-y-3.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1.5">
+                <Users className="w-4 h-4" />
+                <span>สร้างโปรไฟล์ใหม่แยกข้อมูลอิสระ</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="text-xs font-semibold text-slate-500 hover:underline py-1"
+              >
+                ← กลับไปหน้ารายชื่อ
+              </button>
+            </div>
+
+            <div>
+              <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                เลือกไอคอนประจำตัว
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {AVATAR_OPTIONS.map((icon) => (
+                  <button
+                    key={icon}
+                    type="button"
+                    onClick={() => setAvatar(icon)}
+                    className={`w-10 h-10 rounded-xl border text-lg flex items-center justify-center transition-all ${
+                      avatar === icon
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/20 ring-1 ring-emerald-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'
+                    }`}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  ชื่อโปรไฟล์ / ชื่อเล่น
+                </label>
+                <input
+                  type="text"
+                  maxLength={30}
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="เช่น มายด์, พี่บอย"
+                  autoFocus
+                  className="touch-target w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+                />
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  เพศ
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGender('male')}
+                    className={`touch-target rounded-xl border text-xs font-semibold ${
+                      gender === 'male'
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'
+                    }`}
+                  >
+                    👨 ชาย
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGender('female')}
+                    className={`touch-target rounded-xl border text-xs font-semibold ${
+                      gender === 'female'
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'
+                    }`}
+                  >
+                    👩 หญิง
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  อายุ
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="100"
+                  required
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  className="touch-target w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm tabular-nums"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  ส่วนสูง
+                </label>
+                <input
+                  type="number"
+                  min="100"
+                  max="240"
+                  required
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                  className="touch-target w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm tabular-nums"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  น้ำหนัก
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="25"
+                  max="300"
+                  required
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  className="touch-target w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm tabular-nums"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                เป้าหมาย
+              </label>
+              <select
+                value={goal}
+                onChange={(e) => setGoal(e.target.value as Goal)}
+                className="touch-target w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+              >
+                {GOAL_OPTIONS.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="touch-target px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                className="touch-target px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
+              >
+                สร้างและเริ่มใช้งาน
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </ModalShell>
   );

@@ -6,6 +6,7 @@ export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'local-only';
 
 export interface ProfileData {
   name: string;
+  avatar?: string;
   gender: Gender;
   age: number | '';
   height: number | '';

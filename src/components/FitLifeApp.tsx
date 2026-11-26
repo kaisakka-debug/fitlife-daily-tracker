@@ -14,6 +14,8 @@ import {
 import {
   FitLifeState,
   FoodLogItem,
+  Gender,
+  Goal,
   MealItem,
   SyncStatus,
   TabId,
@@ -33,7 +35,10 @@ import {
 import {
   createDefaultState,
   createEmptyPendingOps,
+  getSavedProfileBySyncCode,
+  getSavedProfilesList,
   loadLocalState,
+  removeSavedProfileFromRegistry,
   saveLocalState,
 } from '@/lib/storage';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
@@ -51,6 +56,7 @@ import {
   ConfirmModal,
   CustomMealModal,
   ExerciseModal,
+  ProfileManagerModal,
   PwaGuideModal,
   QuickLogModal,
   ScheduleSetupModal,
@@ -67,6 +73,7 @@ type ActiveModal =
   | { type: 'exercise'; existing: WorkoutExercise | null }
   | { type: 'workout-day'; editIndex: number | null; existing: WorkoutDay | null }
   | { type: 'schedule-setup' }
+  | { type: 'profile-manager' }
   | { type: 'pwa-guide' }
   | {
       type: 'confirm';
@@ -91,6 +98,7 @@ export function FitLifeApp() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const [loadingDateLogs, setLoadingDateLogs] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [savedProfilesVersion, setSavedProfilesVersion] = useState(0);
 
   const supabaseReady = isSupabaseConfigured();
   const stateRef = useRef(state);
@@ -461,35 +469,89 @@ export function FitLifeApp() {
     }
   };
 
-  const handleLoadSyncCode = async (rawCode: string) => {
+  const handleLoadSyncCode = async (rawCode: string): Promise<boolean> => {
     const clean = rawCode.trim().toUpperCase();
     if (clean.length < 6) {
       showToast('กรุณากรอกรหัสซิงก์อย่างน้อย 6 ตัวอักษร', 'warning');
-      return;
+      return false;
     }
     if (!supabaseReady) {
       showToast('ยังไม่ได้เชื่อมต่อ Supabase จึงยังไม่สามารถดึงข้อมูลจากเครื่องอื่นได้', 'warning');
-      return;
+      return false;
     }
     if (!navigator.onLine) {
       showToast('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนโหลดข้อมูลจากรหัสอื่น', 'warning');
-      return;
+      return false;
     }
 
     try {
       const result = await loadCloudSnapshotBySyncCode(clean, state.theme, state.authEmail);
       if (!result.found || !result.state) {
         showToast(`ไม่พบรหัสซิงก์ "${clean}" ในระบบคลาวด์`, 'warning');
-        return;
+        return false;
       }
       saveLocalState(result.state);
       stateRef.current = result.state;
       setState(result.state);
+      setSavedProfilesVersion((v) => v + 1);
       setSyncStatus('synced');
-      showToast(`โหลดข้อมูลจากรหัส "${clean}" เรียบร้อยแล้ว`, 'success');
+      showToast(`โหลดโปรไฟล์ "${result.state.profile.name || clean}" เรียบร้อยแล้ว`, 'success');
+      return true;
     } catch {
       showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ Supabase กรุณาลองใหม่', 'error');
+      return false;
     }
+  };
+
+  const handleCreateNewProfile = (data: {
+    name: string;
+    avatar: string;
+    gender: Gender;
+    age: number;
+    height: number;
+    weight: number;
+    goal: Goal;
+  }) => {
+    const fresh = createDefaultState();
+    fresh.theme = stateRef.current.theme;
+    fresh.profile = {
+      name: data.name,
+      avatar: data.avatar,
+      gender: data.gender,
+      age: data.age,
+      height: data.height,
+      weight: data.weight,
+      goal: data.goal,
+    };
+    if (supabaseReady) {
+      fresh.pendingOps.profileDirty = true;
+    }
+    saveLocalState(fresh);
+    stateRef.current = fresh;
+    setState(fresh);
+    setSavedProfilesVersion((v) => v + 1);
+    scheduleCloudSync(150);
+    showToast(`สร้างและสลับมาใช้โปรไฟล์ "${data.name}" แล้ว`, 'success');
+  };
+
+  const handleSwitchSavedProfile = async (targetSyncCode: string) => {
+    const localSnap = getSavedProfileBySyncCode(targetSyncCode);
+    if (!localSnap) return;
+    localSnap.theme = stateRef.current.theme;
+    saveLocalState(localSnap);
+    stateRef.current = localSnap;
+    setState(localSnap);
+    setSavedProfilesVersion((v) => v + 1);
+    showToast(`สลับมาใช้โปรไฟล์ "${localSnap.profile.name || targetSyncCode}" แล้ว`, 'info');
+    if (supabaseReady && navigator.onLine) {
+      scheduleCloudSync(150);
+    }
+  };
+
+  const handleDeleteSavedProfile = (targetSyncCode: string) => {
+    removeSavedProfileFromRegistry(targetSyncCode);
+    setSavedProfilesVersion((v) => v + 1);
+    showToast('ลบโปรไฟล์ออกจากรายการบนเครื่องนี้แล้ว', 'info');
   };
 
   const handleSendMagicLink = async (email: string) => {
@@ -948,9 +1010,26 @@ export function FitLifeApp() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setModal({ type: 'profile-manager' })}
+              className="touch-target px-2 sm:px-3 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 max-w-[110px] sm:max-w-[160px] transition-colors"
+              title="จัดการ / สลับโปรไฟล์ผู้ใช้"
+              aria-label="โปรไฟล์ผู้ใช้"
+            >
+              <span className="text-base leading-none shrink-0">
+                {mounted
+                  ? state.profile.avatar || (state.profile.gender === 'female' ? '🌸' : '💪')
+                  : '💪'}
+              </span>
+              <span className="hidden sm:inline truncate">
+                {mounted && state.profile.name.trim() ? state.profile.name.trim() : 'โปรไฟล์'}
+              </span>
+            </button>
+
             <div
-              className="touch-target px-2.5 sm:px-3 rounded-xl bg-orange-50 dark:bg-orange-500/15 border border-orange-200/80 dark:border-orange-500/30 text-orange-700 dark:text-orange-300 flex items-center gap-1 text-xs sm:text-sm font-semibold tabular-nums"
+              className="touch-target px-2 sm:px-3 rounded-xl bg-orange-50 dark:bg-orange-500/15 border border-orange-200/80 dark:border-orange-500/30 text-orange-700 dark:text-orange-300 flex items-center gap-1 text-xs sm:text-sm font-semibold tabular-nums"
               title="จำนวนครั้งที่ออกกำลังกายสำเร็จ"
             >
               <span>🔥</span>
@@ -1069,9 +1148,12 @@ export function FitLifeApp() {
             onSelectDate={(d) => void handleSelectDate(d)}
             onSubmitWeight={handleSubmitWeight}
             onCopySyncCode={() => void handleCopySyncCode()}
-            onLoadSyncCode={handleLoadSyncCode}
+            onLoadSyncCode={async (code) => {
+              await handleLoadSyncCode(code);
+            }}
             onSendMagicLink={handleSendMagicLink}
             onSignOutEmail={handleSignOutEmail}
+            onOpenProfileManager={() => setModal({ type: 'profile-manager' })}
             onConfirmResetAll={handleConfirmResetAll}
             onGoToMeals={() => updateState((prev) => ({ ...prev, activeTab: 'meals' }), null)}
           />
@@ -1184,6 +1266,20 @@ export function FitLifeApp() {
         <ScheduleSetupModal
           currentWorkouts={state.workouts}
           onApply={handleApplyWorkoutSchedule}
+          onClose={() => setModal({ type: 'none' })}
+        />
+      )}
+
+      {modal.type === 'profile-manager' && (
+        <ProfileManagerModal
+          key={savedProfilesVersion}
+          currentState={state}
+          savedProfiles={getSavedProfilesList()}
+          supabaseReady={supabaseReady}
+          onSwitchProfile={(code) => void handleSwitchSavedProfile(code)}
+          onDeleteProfile={handleDeleteSavedProfile}
+          onCreateProfile={handleCreateNewProfile}
+          onLoadBySyncCode={handleLoadSyncCode}
           onClose={() => setModal({ type: 'none' })}
         />
       )}

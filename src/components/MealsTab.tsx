@@ -207,7 +207,7 @@ export function MealsTab({
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              รวมเมนูร้านตามสั่ง ก๋วยเตี๋ยว ส้มตำ และ 7-Eleven พร้อมทริคปรับแคลอรี่
+              รวมเมนูร้านตามสั่ง อาหารอีสาน ก๋วยเตี๋ยว และ 7-Eleven ({allMeals.length} เมนู) พร้อมทริคปรับแคลอรี่
             </p>
           </div>
 

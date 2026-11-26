@@ -10,6 +10,7 @@ import { generateSyncCode, generateUuid, getLocalDateString, toSafePositive } fr
 import { cloneDefaultWorkouts, DEFAULT_WORKOUTS } from '@/lib/workouts-data';
 
 export const STORAGE_KEY = 'fitlife_daily_tracker_v2';
+export const PROFILES_REGISTRY_KEY = 'fitlife_profiles_registry_v1';
 const LEGACY_STORAGE_KEY = 'fitlife_daily_tracker_v1';
 
 const VALID_CATEGORIES: MealCategory[] = [
@@ -42,6 +43,7 @@ export function createDefaultState(customSyncCode?: string): FitLifeState {
     authEmail: null,
     profile: {
       name: '',
+      avatar: '💪',
       gender: 'male',
       age: 23,
       height: 175,
@@ -175,6 +177,12 @@ export function normalizeState(raw: unknown): FitLifeState {
     authEmail: typeof r.authEmail === 'string' && r.authEmail ? r.authEmail : null,
     profile: {
       name: typeof rawProfile.name === 'string' ? rawProfile.name : '',
+      avatar:
+        typeof rawProfile.avatar === 'string' && rawProfile.avatar
+          ? rawProfile.avatar
+          : rawProfile.gender === 'female'
+          ? '🌸'
+          : '💪',
       gender: rawProfile.gender === 'female' ? 'female' : 'male',
       age:
         rawProfile.age === ''
@@ -264,7 +272,54 @@ export function saveLocalState(state: FitLifeState): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    upsertProfileInRegistry(state);
   } catch {
     // Ignore storage quota errors
+  }
+}
+
+function readRawRegistry(): Record<string, FitLifeState> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(PROFILES_REGISTRY_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, FitLifeState>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function upsertProfileInRegistry(state: FitLifeState): void {
+  if (typeof window === 'undefined' || !state.syncCode) return;
+  try {
+    const registry = readRawRegistry();
+    registry[state.syncCode] = state;
+    window.localStorage.setItem(PROFILES_REGISTRY_KEY, JSON.stringify(registry));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function getSavedProfilesList(): FitLifeState[] {
+  const registry = readRawRegistry();
+  return Object.values(registry).map((item) => normalizeState(item));
+}
+
+export function getSavedProfileBySyncCode(syncCode: string): FitLifeState | null {
+  const registry = readRawRegistry();
+  const clean = syncCode.trim().toUpperCase();
+  const found = registry[clean];
+  return found ? normalizeState(found) : null;
+}
+
+export function removeSavedProfileFromRegistry(syncCode: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const registry = readRawRegistry();
+    delete registry[syncCode.trim().toUpperCase()];
+    window.localStorage.setItem(PROFILES_REGISTRY_KEY, JSON.stringify(registry));
+  } catch {
+    // Ignore storage errors
   }
 }

@@ -15,6 +15,7 @@ import {
   Plus,
   RotateCcw,
   Calendar,
+  Users,
 } from 'lucide-react';
 import {
   FitLifeState,
@@ -25,8 +26,10 @@ import {
 } from '@/types/fitlife';
 import {
   ACTIVITY_CARDS,
+  AVATAR_OPTIONS,
   GOAL_OPTIONS,
   buildProfileSummaryLine,
+  calculateBmi,
   formatNumber,
   formatShortThaiDate,
   shiftDateString,
@@ -51,6 +54,7 @@ interface TodayTabProps {
   onLoadSyncCode: (code: string) => Promise<void>;
   onSendMagicLink: (email: string) => Promise<void>;
   onSignOutEmail: () => Promise<void>;
+  onOpenProfileManager: () => void;
   onConfirmResetAll: () => void;
   onGoToMeals: () => void;
 }
@@ -72,6 +76,7 @@ export function TodayTab({
   onLoadSyncCode,
   onSendMagicLink,
   onSignOutEmail,
+  onOpenProfileManager,
   onConfirmResetAll,
   onGoToMeals,
 }: TodayTabProps) {
@@ -117,6 +122,10 @@ export function TodayTab({
   const isViewingYesterday = state.selectedDate === yesterdayStr;
 
   const summaryLine = buildProfileSummaryLine(state.profile, nutrition);
+  const bmiInfo = calculateBmi(state.profile.weight, state.profile.height);
+  const activeAvatar =
+    state.profile.avatar || (state.profile.gender === 'female' ? '🌸' : '💪');
+  const displayProfileName = state.profile.name.trim() || 'ผู้ใช้ทั่วไป';
 
   const syncBadge = (() => {
     if (syncStatus === 'syncing') {
@@ -185,31 +194,58 @@ export function TodayTab({
     <div className="space-y-4 animate-fade-slide">
       {/* 1. Personal Profile & Cloud Sync Card */}
       <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setProfileCollapsed((v) => !v)}
-          className="w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors touch-target"
-          aria-expanded={!profileCollapsed}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white">
-                👤 ข้อมูลส่วนตัว & ซิงก์คลาวด์
-              </h2>
-              {syncBadge}
-            </div>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-              {summaryLine}
-            </p>
-          </div>
-          <span
-            className={`shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-transform ${
-              profileCollapsed ? '' : 'rotate-180'
-            }`}
+        <div className="px-4 py-3.5 flex items-center justify-between gap-2.5">
+          <button
+            type="button"
+            onClick={() => setProfileCollapsed((v) => !v)}
+            className="flex-1 min-w-0 flex items-center gap-3 text-left touch-target"
+            aria-expanded={!profileCollapsed}
           >
-            <ChevronDown className="w-4 h-4" />
-          </span>
-        </button>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 flex items-center justify-center text-2xl shrink-0">
+              {activeAvatar}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h2 className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                  โปรไฟล์: {displayProfileName}
+                </h2>
+                {syncBadge}
+                {bmiInfo && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border tabular-nums ${bmiInfo.badgeClass}`}
+                  >
+                    BMI {bmiInfo.bmi} ({bmiInfo.label})
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                {summaryLine}
+              </p>
+            </div>
+          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenProfileManager}
+              className="touch-target px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 transition-colors"
+              title="จัดการ / สลับโปรไฟล์ผู้ใช้"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">สลับ / สร้างโปรไฟล์</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProfileCollapsed((v) => !v)}
+              className={`w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-transform ${
+                profileCollapsed ? '' : 'rotate-180'
+              }`}
+              aria-label="พับ/กางการ์ดโปรไฟล์"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
         {!profileCollapsed && (
           <div className="px-4 pb-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4">
@@ -315,6 +351,29 @@ export function TodayTab({
             </div>
 
             {/* Profile Form Fields */}
+            <div>
+              <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                ไอคอนโปรไฟล์
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {AVATAR_OPTIONS.map((icon) => (
+                  <button
+                    key={icon}
+                    type="button"
+                    onClick={() => onUpdateProfile({ avatar: icon })}
+                    className={`w-10 h-10 rounded-xl border text-lg flex items-center justify-center transition-all ${
+                      activeAvatar === icon
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/20 ring-1 ring-emerald-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'
+                    }`}
+                    aria-label={`เลือกไอคอน ${icon}`}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label

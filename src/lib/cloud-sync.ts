@@ -14,7 +14,7 @@ import {
   toSafePositive,
 } from '@/lib/nutrition';
 import { cloneDefaultWorkouts, DEFAULT_WORKOUTS } from '@/lib/workouts-data';
-import { createDefaultState, createEmptyPendingOps } from '@/lib/storage';
+import { createDefaultState, createEmptyPendingOps, getSavedProfileBySyncCode } from '@/lib/storage';
 
 const VALID_CATEGORIES: MealCategory[] = [
   'ตามสั่ง',
@@ -392,6 +392,7 @@ export async function loadCloudSnapshotBySyncCode(
 
   const today = getLocalDateString();
   const base = createDefaultState(normalizedCode);
+  const existingLocal = getSavedProfileBySyncCode(normalizedCode);
   const mult = Number(profile.activity_multiplier);
 
   return {
@@ -403,6 +404,9 @@ export async function loadCloudSnapshotBySyncCode(
       authEmail,
       profile: {
         name: profile.name || '',
+        avatar:
+          existingLocal?.profile.avatar ||
+          (profile.gender === 'female' ? '🌸' : '💪'),
         gender: profile.gender === 'female' ? 'female' : 'male',
         age: Number.isFinite(Number(profile.age)) ? Number(profile.age) : 23,
         height: Number.isFinite(Number(profile.height)) ? Number(profile.height) : 175,

@@ -191,6 +191,49 @@ export function calculateNutrition(
   };
 }
 
+export const AVATAR_OPTIONS = ['💪', '🏃', '🔥', '🥗', '🏋️', '⚡', '🦊', '🌸'] as const;
+
+export interface BmiSummary {
+  bmi: number;
+  label: string;
+  badgeClass: string;
+}
+
+export function calculateBmi(weight: unknown, height: unknown): BmiSummary | null {
+  const w = toSafePositive(weight);
+  const h = toSafePositive(height);
+  if (w <= 0 || h <= 0) return null;
+  const meters = h / 100;
+  const bmi = Number((w / (meters * meters)).toFixed(1));
+  // เกณฑ์ BMI สำหรับคนเอเชีย (WHO Asia-Pacific)
+  if (bmi < 18.5) {
+    return {
+      bmi,
+      label: 'น้ำหนักน้อย',
+      badgeClass: 'bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/30',
+    };
+  }
+  if (bmi < 23) {
+    return {
+      bmi,
+      label: 'สมส่วน',
+      badgeClass: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30',
+    };
+  }
+  if (bmi < 25) {
+    return {
+      bmi,
+      label: 'ท้วม',
+      badgeClass: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30',
+    };
+  }
+  return {
+    bmi,
+    label: 'เริ่มอ้วน/อ้วน',
+    badgeClass: 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30',
+  };
+}
+
 export function buildProfileSummaryLine(
   profile: ProfileData,
   nutrition: NutritionSummary
