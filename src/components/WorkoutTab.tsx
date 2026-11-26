@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Pencil, Plus, Timer, Trash2 } from 'lucide-react';
-import { FitLifeState, WorkoutExercise } from '@/types/fitlife';
+import { CalendarPlus, Pencil, Plus, Settings2, Timer, Trash2 } from 'lucide-react';
+import { FitLifeState, WorkoutDay, WorkoutExercise } from '@/types/fitlife';
 
 interface WorkoutTabProps {
   state: FitLifeState;
   onSelectDay: (dayIndex: number) => void;
+  onOpenScheduleSetup: () => void;
+  onOpenAddDay: () => void;
+  onOpenEditDay: (dayIndex: number, day: WorkoutDay) => void;
+  onConfirmDeleteDay: (dayIndex: number, day: WorkoutDay) => void;
   onToggleSet: (exId: string, setIndex: number) => boolean;
   onUpdateExerciseField: (exId: string, field: 'weight' | 'reps', value: number) => void;
   onOpenAddExercise: () => void;
@@ -27,6 +31,10 @@ function formatTimerClock(sec: number): string {
 export function WorkoutTab({
   state,
   onSelectDay,
+  onOpenScheduleSetup,
+  onOpenAddDay,
+  onOpenEditDay,
+  onConfirmDeleteDay,
   onToggleSet,
   onUpdateExerciseField,
   onOpenAddExercise,
@@ -140,7 +148,11 @@ export function WorkoutTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
-  const activeDay = state.workouts[state.activeWorkoutDay] || state.workouts[0];
+  const safeDayIdx =
+    state.activeWorkoutDay >= 0 && state.activeWorkoutDay < state.workouts.length
+      ? state.activeWorkoutDay
+      : 0;
+  const activeDay = state.workouts[safeDayIdx] || state.workouts[0];
   const totalSets = activeDay.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
   const doneSets = activeDay.exercises.reduce(
     (sum, ex) => sum + ex.sets.filter(Boolean).length,
@@ -254,50 +266,58 @@ export function WorkoutTab({
         </div>
       </section>
 
-      {/* 2. 3-Day Split Exercises */}
+      {/* 2. Flexible User-Customizable Workout Split */}
       <section className="rounded-2xl p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div>
             <h2 className="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white">
-              ตารางฝึก 3 วัน (ปรับแต่งท่าได้อิสระ)
+              ตารางฝึกของฉัน ({state.workouts.length} วัน/สัปดาห์)
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {activeDay.focus} • ทำไปแล้ว{' '}
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                {doneSets}/{totalSets}
-              </span>{' '}
-              เซต
+              ปรับเลือกวันฝึก เพิ่ม-ลดจำนวนวัน และแก้ไขท่าได้ตามตารางของคุณเอง
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onOpenAddExercise}
-            className="touch-target px-3.5 py-2 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 font-display font-semibold text-xs sm:text-sm inline-flex items-center gap-1.5 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>เพิ่มท่าฝึก</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={onOpenScheduleSetup}
+              className="touch-target flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-display font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span>เลือกวันฝึก</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenAddDay}
+              className="touch-target flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 font-display font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              <span>+ เพิ่มวันฝึก</span>
+            </button>
+          </div>
         </div>
 
-        {/* Day Tabs */}
-        <div className="grid grid-cols-3 gap-2">
+        {/* Dynamic Day Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
           {state.workouts.map((day, idx) => {
-            const active = idx === state.activeWorkoutDay;
+            const active = idx === safeDayIdx;
             const dSets = day.exercises.reduce((s, ex) => s + ex.sets.length, 0);
             const dDone = day.exercises.reduce((s, ex) => s + ex.sets.filter(Boolean).length, 0);
             return (
               <button
-                key={day.dayName}
+                key={`${day.dayName}_${idx}`}
                 type="button"
                 onClick={() => onSelectDay(idx)}
-                className={`touch-target px-2.5 py-2 rounded-xl border text-center transition-all ${
+                className={`touch-target shrink-0 min-w-[96px] px-3.5 py-2 rounded-xl border text-center transition-all ${
                   active
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                     : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <div className="font-display font-bold text-xs sm:text-sm">{day.dayName}</div>
-                <div className="text-[11px] opacity-85 tabular-nums">
+                <div className="font-display font-bold text-xs sm:text-sm whitespace-nowrap">
+                  {day.dayName}
+                </div>
+                <div className="text-[11px] opacity-85 tabular-nums whitespace-nowrap">
                   {dDone}/{dSets} เซต
                 </div>
               </button>
@@ -305,6 +325,53 @@ export function WorkoutTab({
           })}
         </div>
 
+        {/* Active Day Header & Controls */}
+        <div className="rounded-xl p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                {activeDay.dayName}
+              </span>
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                ({doneSets}/{totalSets} เซต)
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              {activeDay.focus || 'โปรแกรมส่วนตัว'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenEditDay(safeDayIdx, activeDay)}
+              className="touch-target px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>แก้ไขวัน</span>
+            </button>
+            {state.workouts.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onConfirmDeleteDay(safeDayIdx, activeDay)}
+                className="touch-target px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/15 text-rose-600 dark:text-rose-400 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ลบวันนี้</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenAddExercise}
+              className="touch-target px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>เพิ่มท่าฝึก</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Exercise Cards */}
         {activeDay.exercises.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-center space-y-2">
             <p className="text-sm font-medium text-slate-600 dark:text-slate-300">

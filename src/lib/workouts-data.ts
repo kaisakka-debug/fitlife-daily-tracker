@@ -1,4 +1,15 @@
 import { WorkoutDay } from '@/types/fitlife';
+import { generateUuid } from '@/lib/nutrition';
+
+export const THAI_WEEKDAYS = [
+  'วันจันทร์',
+  'วันอังคาร',
+  'วันพุธ',
+  'วันพฤหัสบดี',
+  'วันศุกร์',
+  'วันเสาร์',
+  'วันอาทิตย์',
+] as const;
 
 export const DEFAULT_WORKOUTS: WorkoutDay[] = [
   {
@@ -146,4 +157,31 @@ export const DEFAULT_WORKOUTS: WorkoutDay[] = [
 
 export function cloneDefaultWorkouts(): WorkoutDay[] {
   return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)) as WorkoutDay[];
+}
+
+export function createWorkoutDayFromTemplate(
+  dayName: string,
+  focus?: string,
+  templateType: 'fullbodyA' | 'fullbodyB' | 'fullbodyC' | 'empty' = 'fullbodyA'
+): WorkoutDay {
+  if (templateType === 'empty') {
+    return {
+      dayName,
+      focus: focus?.trim() || 'โปรแกรมส่วนตัว',
+      completedAt: null,
+      exercises: [],
+    };
+  }
+  const idx = templateType === 'fullbodyB' ? 1 : templateType === 'fullbodyC' ? 2 : 0;
+  const tpl = DEFAULT_WORKOUTS[idx];
+  return {
+    dayName,
+    focus: focus?.trim() || tpl.focus,
+    completedAt: null,
+    exercises: tpl.exercises.map((ex) => ({
+      ...ex,
+      id: generateUuid(),
+      sets: ex.sets.map(() => false),
+    })),
+  };
 }

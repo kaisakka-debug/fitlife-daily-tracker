@@ -57,7 +57,7 @@ create table if not exists public.custom_meals (
 create table if not exists public.workout_logs (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles(id) on delete cascade,
-  day_index int not null, -- 0: Mon, 1: Wed, 2: Fri
+  day_index int not null, -- 0-based index for each user's custom workout day
   workout_state jsonb not null, -- Stores exercises, weights, reps, set checkmarks
   completed_at timestamptz,
   updated_at timestamptz default now(),

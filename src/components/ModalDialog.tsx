@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { X, Share, PlusSquare, Smartphone } from 'lucide-react';
-import { MealCategory, MealItem, WorkoutExercise } from '@/types/fitlife';
+import { MealCategory, MealItem, WorkoutDay, WorkoutExercise } from '@/types/fitlife';
 import { MEAL_CATEGORIES } from '@/lib/meals-data';
+import { THAI_WEEKDAYS, createWorkoutDayFromTemplate } from '@/lib/workouts-data';
 import { toSafePositive } from '@/lib/nutrition';
 
 interface ModalShellProps {
@@ -580,6 +581,393 @@ export function PwaGuideModal({ onClose }: { onClose: () => void }) {
             className="touch-target px-5 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold"
           >
             เข้าใจแล้ว
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+interface WorkoutDayModalProps {
+  existing: WorkoutDay | null;
+  defaultDayNumber: number;
+  onSubmit: (data: {
+    dayName: string;
+    focus: string;
+    templateType: 'fullbodyA' | 'fullbodyB' | 'fullbodyC' | 'empty';
+  }) => void;
+  onClose: () => void;
+}
+
+export function WorkoutDayModal({
+  existing,
+  defaultDayNumber,
+  onSubmit,
+  onClose,
+}: WorkoutDayModalProps) {
+  const [dayName, setDayName] = useState(existing?.dayName || `วันที่ ${defaultDayNumber}`);
+  const [focus, setFocus] = useState(existing?.focus || '');
+  const [templateType, setTemplateType] = useState<
+    'fullbodyA' | 'fullbodyB' | 'fullbodyC' | 'empty'
+  >('fullbodyA');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dayName.trim()) return;
+    onSubmit({
+      dayName: dayName.trim(),
+      focus: focus.trim(),
+      templateType,
+    });
+    onClose();
+  };
+
+  return (
+    <ModalShell
+      title={existing ? `แก้ไขวันฝึก: ${existing.dayName}` : '+ เพิ่มวันฝึกใหม่'}
+      onClose={onClose}
+    >
+      <form onSubmit={handleSubmit} className="space-y-3.5">
+        <div>
+          <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+            เลือกวันในสัปดาห์ (แตะเพื่อใส่ชื่อด่วน)
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {THAI_WEEKDAYS.map((wd) => (
+              <button
+                key={wd}
+                type="button"
+                onClick={() => setDayName(wd)}
+                className={`touch-target px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors ${
+                  dayName === wd
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                }`}
+              >
+                {wd}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="wd-name"
+            className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1"
+          >
+            ชื่อวันฝึก (พิมพ์แก้ไขเองได้)
+          </label>
+          <input
+            id="wd-name"
+            type="text"
+            maxLength={40}
+            required
+            value={dayName}
+            onChange={(e) => setDayName(e.target.value)}
+            placeholder="เช่น วันอังคาร, Push Day, วันที่ 4"
+            autoFocus
+            className="touch-target w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="wd-focus"
+            className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1"
+          >
+            โฟกัส / กลุ่มกล้ามเนื้อ (ไม่บังคับ)
+          </label>
+          <input
+            id="wd-focus"
+            type="text"
+            maxLength={60}
+            value={focus}
+            onChange={(e) => setFocus(e.target.value)}
+            placeholder="เช่น เน้นอก ไหล่ หลังแขน หรือ คาร์ดิโอ"
+            className="touch-target w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        {!existing && (
+          <div>
+            <label
+              htmlFor="wd-template"
+              className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1"
+            >
+              ท่าฝึกเริ่มต้น
+            </label>
+            <select
+              id="wd-template"
+              value={templateType}
+              onChange={(e) =>
+                setTemplateType(
+                  e.target.value as 'fullbodyA' | 'fullbodyB' | 'fullbodyC' | 'empty'
+                )
+              }
+              className="touch-target w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+            >
+              <option value="fullbodyA">โปรแกรมเต็มตัว A (อก หลัง ขา)</option>
+              <option value="fullbodyB">โปรแกรมเต็มตัว B (สะโพก หลังบน ไหล่)</option>
+              <option value="fullbodyC">โปรแกรมเต็มตัว C (ขา แขน แกนกลาง)</option>
+              <option value="empty">วันว่าง (เลือกเพิ่มท่าเองทั้งหมด)</option>
+            </select>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="touch-target px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="submit"
+            className="touch-target px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
+          >
+            {existing ? 'บันทึกการแก้ไข' : 'เพิ่มวันฝึก'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+interface ScheduleSetupModalProps {
+  currentWorkouts: WorkoutDay[];
+  onApply: (nextWorkouts: WorkoutDay[]) => void;
+  onClose: () => void;
+}
+
+export function ScheduleSetupModal({
+  currentWorkouts,
+  onApply,
+  onClose,
+}: ScheduleSetupModalProps) {
+  const initialMatchedWeekdays = currentWorkouts
+    .map((w) => w.dayName)
+    .filter((name) => (THAI_WEEKDAYS as readonly string[]).includes(name));
+
+  const [mode, setMode] = useState<'weekdays' | 'count'>('weekdays');
+  const [selectedWeekdays, setSelectedWeekdays] = useState<string[]>(
+    initialMatchedWeekdays.length > 0
+      ? initialMatchedWeekdays
+      : ['วันจันทร์', 'วันพุธ', 'วันศุกร์']
+  );
+  const [dayCount, setDayCount] = useState<number>(
+    Math.min(7, Math.max(1, currentWorkouts.length || 3))
+  );
+  const [fillStarter, setFillStarter] = useState(true);
+
+  const toggleWeekday = (day: string) => {
+    setSelectedWeekdays((prev) => {
+      if (prev.includes(day)) {
+        if (prev.length <= 1) return prev; // Keep at least 1 day
+        return prev.filter((d) => d !== day);
+      }
+      // Keep natural Mon -> Sun ordering
+      return THAI_WEEKDAYS.filter((wd) => wd === day || prev.includes(wd));
+    });
+  };
+
+  const applyPreset = (days: string[]) => {
+    setMode('weekdays');
+    setSelectedWeekdays(days);
+  };
+
+  const handleSave = () => {
+    const templates: Array<'fullbodyA' | 'fullbodyB' | 'fullbodyC'> = [
+      'fullbodyA',
+      'fullbodyB',
+      'fullbodyC',
+    ];
+
+    if (mode === 'weekdays') {
+      const next = selectedWeekdays.map((dayName, idx) => {
+        const existing = currentWorkouts.find((w) => w.dayName === dayName);
+        if (existing) return existing;
+        return createWorkoutDayFromTemplate(
+          dayName,
+          undefined,
+          fillStarter ? templates[idx % templates.length] : 'empty'
+        );
+      });
+      onApply(next);
+    } else {
+      const next: WorkoutDay[] = [];
+      for (let i = 0; i < dayCount; i++) {
+        const existing = currentWorkouts[i];
+        if (existing) {
+          next.push(existing);
+        } else {
+          next.push(
+            createWorkoutDayFromTemplate(
+              `วันที่ ${i + 1}`,
+              undefined,
+              fillStarter ? templates[i % templates.length] : 'empty'
+            )
+          );
+        }
+      }
+      onApply(next);
+    }
+    onClose();
+  };
+
+  return (
+    <ModalShell title="กำหนดวันและจำนวนวันออกกำลังกาย" onClose={onClose}>
+      <div className="space-y-4">
+        {/* Mode Switcher */}
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setMode('weekdays')}
+            className={`touch-target rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              mode === 'weekdays'
+                ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            เลือกตามวัน (จ.–อา.)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('count')}
+            className={`touch-target rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              mode === 'count'
+                ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            กำหนดจำนวนวัน (1–7 วัน)
+          </button>
+        </div>
+
+        {mode === 'weekdays' ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>แตะเลือกวันที่คุณออกกำลังกายประจำ</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                เลือกแล้ว {selectedWeekdays.length} วัน/สัปดาห์
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {THAI_WEEKDAYS.map((wd) => {
+                const active = selectedWeekdays.includes(wd);
+                return (
+                  <button
+                    key={wd}
+                    type="button"
+                    onClick={() => toggleWeekday(wd)}
+                    className={`touch-target px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold flex items-center justify-between transition-all ${
+                      active
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <span>{wd}</span>
+                    <span>{active ? '✓' : '+'}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
+                สูตรยอดนิยม (แตะเลือกเร็ว):
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyPreset(['วันอังคาร', 'วันพฤหัสบดี'])}
+                  className="touch-target px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200"
+                >
+                  2 วัน (อ./พฤ.)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset(['วันจันทร์', 'วันพุธ', 'วันศุกร์'])}
+                  className="touch-target px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200"
+                >
+                  3 วัน (จ./พ./ศ.)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    applyPreset(['วันจันทร์', 'วันอังคาร', 'วันพฤหัสบดี', 'วันศุกร์'])
+                  }
+                  className="touch-target px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200"
+                >
+                  4 วัน (จ./อ./พฤ./ศ.)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    applyPreset([
+                      'วันจันทร์',
+                      'วันอังคาร',
+                      'วันพุธ',
+                      'วันพฤหัสบดี',
+                      'วันศุกร์',
+                    ])
+                  }
+                  className="touch-target px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200"
+                >
+                  5 วัน (จ.–ศ.)
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              เลือกจำนวนวันฝึกต่อสัปดาห์ (เหมาะกับคนที่หมุนรอบฝึกโดยไม่ยึดติดวันในปฏิทิน)
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setDayCount(n)}
+                  className={`touch-target py-2.5 rounded-xl border font-display font-bold text-sm transition-all ${
+                    dayCount === n
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  {n} วัน
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <label className="flex items-center gap-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={fillStarter}
+            onChange={(e) => setFillStarter(e.target.checked)}
+            className="w-4 h-4 accent-emerald-600 rounded"
+          />
+          <span>ใส่ท่าฝึกแนะนำเริ่มต้นให้วันที่เพิ่มใหม่ (วันเดิมที่มีท่าอยู่แล้วจะไม่ถูกลบ)</span>
+        </label>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="touch-target px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="touch-target px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"
+          >
+            บันทึกตารางวันฝึก
           </button>
         </div>
       </div>

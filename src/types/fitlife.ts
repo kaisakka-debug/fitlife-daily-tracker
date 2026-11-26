@@ -72,6 +72,7 @@ export interface PendingOps {
   upsertedCustomMeals: MealItem[];
   deletedCustomMealIds: string[];
   dirtyWorkoutDays: number[];
+  syncAllWorkouts: boolean;
 }
 
 export interface FitLifeState {

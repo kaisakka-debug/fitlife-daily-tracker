@@ -18,6 +18,7 @@ import {
   SyncStatus,
   TabId,
   ToastMessage,
+  WorkoutDay,
   WorkoutExercise,
 } from '@/types/fitlife';
 import {
@@ -45,12 +46,15 @@ import {
 } from '@/lib/cloud-sync';
 import { BeforeInstallPromptEvent, PwaRegistrar } from '@/components/PwaRegistrar';
 import { ToastContainer } from '@/components/ToastContainer';
+import { createWorkoutDayFromTemplate } from '@/lib/workouts-data';
 import {
   ConfirmModal,
   CustomMealModal,
   ExerciseModal,
   PwaGuideModal,
   QuickLogModal,
+  ScheduleSetupModal,
+  WorkoutDayModal,
 } from '@/components/ModalDialog';
 import { TodayTab } from '@/components/TodayTab';
 import { MealsTab } from '@/components/MealsTab';
@@ -61,6 +65,8 @@ type ActiveModal =
   | { type: 'quick-log' }
   | { type: 'add-meal' }
   | { type: 'exercise'; existing: WorkoutExercise | null }
+  | { type: 'workout-day'; editIndex: number | null; existing: WorkoutDay | null }
+  | { type: 'schedule-setup' }
   | { type: 'pwa-guide' }
   | {
       type: 'confirm';
@@ -165,6 +171,10 @@ export function FitLifeApp() {
             dirtyWorkoutDays: current.pendingOps.dirtyWorkoutDays.filter(
               (d) => !flushedDays.has(d)
             ),
+            syncAllWorkouts:
+              current.pendingOps.syncAllWorkouts && !snapshot.pendingOps.syncAllWorkouts
+                ? true
+                : false,
           },
         };
         saveLocalState(nextState);
@@ -750,6 +760,112 @@ export function FitLifeApp() {
     });
   };
 
+  const handleSaveWorkoutDay = (
+    data: {
+      dayName: string;
+      focus: string;
+      templateType: 'fullbodyA' | 'fullbodyB' | 'fullbodyC' | 'empty';
+    },
+    editIndex: number | null
+  ) => {
+    let targetIndex = editIndex ?? 0;
+    updateState((prev) => {
+      if (editIndex !== null && prev.workouts[editIndex]) {
+        const nextWorkouts = prev.workouts.map((day, i) =>
+          i === editIndex
+            ? {
+                ...day,
+                dayName: data.dayName,
+                focus: data.focus || day.focus,
+              }
+            : day
+        );
+        return {
+          ...prev,
+          workouts: nextWorkouts,
+          pendingOps: {
+            ...prev.pendingOps,
+            dirtyWorkoutDays: Array.from(
+              new Set([...prev.pendingOps.dirtyWorkoutDays, editIndex])
+            ),
+          },
+        };
+      }
+
+      const newDay = createWorkoutDayFromTemplate(
+        data.dayName,
+        data.focus,
+        data.templateType
+      );
+      const nextWorkouts = [...prev.workouts, newDay];
+      targetIndex = nextWorkouts.length - 1;
+      return {
+        ...prev,
+        workouts: nextWorkouts,
+        activeWorkoutDay: targetIndex,
+        pendingOps: {
+          ...prev.pendingOps,
+          syncAllWorkouts: true,
+        },
+      };
+    }, 150);
+
+    showToast(
+      editIndex !== null
+        ? `อัปเดต "${data.dayName}" แล้ว`
+        : `เพิ่ม "${data.dayName}" ลงตารางฝึกแล้ว`,
+      'success'
+    );
+  };
+
+  const handleConfirmDeleteWorkoutDay = (dayIndex: number, day: WorkoutDay) => {
+    if (state.workouts.length <= 1) {
+      showToast('ต้องมีวันฝึกอย่างน้อย 1 วันในตาราง', 'warning');
+      return;
+    }
+    setModal({
+      type: 'confirm',
+      title: `ลบ "${day.dayName}"?`,
+      message: `ต้องการลบ "${day.dayName}" และท่าฝึกทั้งหมดในวันนี้ออกจากตารางใช่ไหม?`,
+      confirmLabel: 'ลบวันนี้',
+      danger: true,
+      onConfirm: () => {
+        updateState((prev) => {
+          if (prev.workouts.length <= 1) return prev;
+          const nextWorkouts = prev.workouts.filter((_, idx) => idx !== dayIndex);
+          const nextActive = Math.min(prev.activeWorkoutDay, nextWorkouts.length - 1);
+          return {
+            ...prev,
+            workouts: nextWorkouts,
+            activeWorkoutDay: Math.max(0, nextActive),
+            pendingOps: {
+              ...prev.pendingOps,
+              syncAllWorkouts: true,
+            },
+          };
+        }, 150);
+        showToast(`ลบ "${day.dayName}" ออกจากตารางแล้ว`, 'info');
+      },
+    });
+  };
+
+  const handleApplyWorkoutSchedule = (nextWorkouts: WorkoutDay[]) => {
+    if (nextWorkouts.length === 0) return;
+    updateState(
+      (prev) => ({
+        ...prev,
+        workouts: nextWorkouts,
+        activeWorkoutDay: 0,
+        pendingOps: {
+          ...prev.pendingOps,
+          syncAllWorkouts: true,
+        },
+      }),
+      150
+    );
+    showToast(`อัปเดตตารางฝึกเป็น ${nextWorkouts.length} วัน/สัปดาห์แล้ว`, 'success');
+  };
+
   const handleCompleteWorkout = () => {
     let upgraded = false;
     let nextStreak = 1;
@@ -974,6 +1090,14 @@ export function FitLifeApp() {
             onSelectDay={(dayIdx) =>
               updateState((prev) => ({ ...prev, activeWorkoutDay: dayIdx }), null)
             }
+            onOpenScheduleSetup={() => setModal({ type: 'schedule-setup' })}
+            onOpenAddDay={() =>
+              setModal({ type: 'workout-day', editIndex: null, existing: null })
+            }
+            onOpenEditDay={(dayIdx, day) =>
+              setModal({ type: 'workout-day', editIndex: dayIdx, existing: day })
+            }
+            onConfirmDeleteDay={handleConfirmDeleteWorkoutDay}
             onToggleSet={handleToggleSet}
             onUpdateExerciseField={handleUpdateExerciseField}
             onOpenAddExercise={() => setModal({ type: 'exercise', existing: null })}
@@ -1043,6 +1167,23 @@ export function FitLifeApp() {
         <ExerciseModal
           existing={modal.existing}
           onSubmit={(data) => handleSaveExercise(data, modal.existing?.id)}
+          onClose={() => setModal({ type: 'none' })}
+        />
+      )}
+
+      {modal.type === 'workout-day' && (
+        <WorkoutDayModal
+          existing={modal.existing}
+          defaultDayNumber={state.workouts.length + 1}
+          onSubmit={(data) => handleSaveWorkoutDay(data, modal.editIndex)}
+          onClose={() => setModal({ type: 'none' })}
+        />
+      )}
+
+      {modal.type === 'schedule-setup' && (
+        <ScheduleSetupModal
+          currentWorkouts={state.workouts}
+          onApply={handleApplyWorkoutSchedule}
           onClose={() => setModal({ type: 'none' })}
         />
       )}

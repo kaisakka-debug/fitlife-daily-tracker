@@ -29,6 +29,7 @@ export function createEmptyPendingOps(): PendingOps {
     upsertedCustomMeals: [],
     deletedCustomMealIds: [],
     dirtyWorkoutDays: [],
+    syncAllWorkouts: false,
   };
 }
 
@@ -62,24 +63,31 @@ export function createDefaultState(customSyncCode?: string): FitLifeState {
 }
 
 function normalizeWorkouts(raw: unknown): WorkoutDay[] {
-  if (!Array.isArray(raw) || raw.length !== 3) {
+  if (!Array.isArray(raw) || raw.length === 0) {
     return cloneDefaultWorkouts();
   }
   return raw.map((day, idx) => {
-    const fallback = DEFAULT_WORKOUTS[idx];
+    const fallback = DEFAULT_WORKOUTS[idx % DEFAULT_WORKOUTS.length];
     const obj = (day && typeof day === 'object' ? day : {}) as Record<string, unknown>;
     const exercisesRaw = Array.isArray(obj.exercises) ? obj.exercises : [];
     return {
-      dayName: typeof obj.dayName === 'string' ? obj.dayName : fallback.dayName,
+      dayName:
+        typeof obj.dayName === 'string' && obj.dayName.trim()
+          ? obj.dayName
+          : `วันที่ ${idx + 1}`,
       focus: typeof obj.focus === 'string' ? obj.focus : fallback.focus,
       completedAt: typeof obj.completedAt === 'string' ? obj.completedAt : null,
       exercises: exercisesRaw.map((ex) => {
         const e = (ex && typeof ex === 'object' ? ex : {}) as Record<string, unknown>;
-        const setsRaw = Array.isArray(e.sets) && e.sets.length > 0 ? e.sets.map(Boolean) : [false, false, false, false];
+        const setsRaw =
+          Array.isArray(e.sets) && e.sets.length > 0
+            ? e.sets.map(Boolean)
+            : [false, false, false, false];
         return {
           id: typeof e.id === 'string' && e.id ? e.id : generateUuid(),
           name: typeof e.name === 'string' ? e.name : 'ท่าฝึก',
-          weight: Number.isFinite(Number(e.weight)) && Number(e.weight) >= 0 ? Number(e.weight) : 0,
+          weight:
+            Number.isFinite(Number(e.weight)) && Number(e.weight) >= 0 ? Number(e.weight) : 0,
           reps: Number.isFinite(Number(e.reps)) && Number(e.reps) >= 0 ? Number(e.reps) : 10,
           sets: setsRaw,
           tip: typeof e.tip === 'string' ? e.tip : '',
@@ -155,6 +163,10 @@ export function normalizeState(raw: unknown): FitLifeState {
   const validMult = [1.2, 1.375, 1.5, 1.65].includes(mult) ? mult : 1.2;
 
   const rawPending = (r.pendingOps && typeof r.pendingOps === 'object' ? r.pendingOps : {}) as Partial<PendingOps>;
+  const workouts = normalizeWorkouts(r.workouts);
+  const rawDayIdx = Number(r.activeWorkoutDay);
+  const validDayIdx =
+    Number.isInteger(rawDayIdx) && rawDayIdx >= 0 && rawDayIdx < workouts.length ? rawDayIdx : 0;
 
   return {
     theme: r.theme === 'dark' ? 'dark' : 'light',
@@ -208,8 +220,8 @@ export function normalizeState(raw: unknown): FitLifeState {
     customMeals: Array.isArray(r.customMeals)
       ? r.customMeals.map(normalizeMeal).filter((m): m is MealItem => Boolean(m))
       : [],
-    workouts: normalizeWorkouts(r.workouts),
-    activeWorkoutDay: [0, 1, 2].includes(Number(r.activeWorkoutDay)) ? Number(r.activeWorkoutDay) : 0,
+    workouts,
+    activeWorkoutDay: validDayIdx,
     workoutStreak:
       Number.isFinite(Number(r.workoutStreak)) && Number(r.workoutStreak) >= 0
         ? Math.floor(Number(r.workoutStreak))
@@ -224,6 +236,7 @@ export function normalizeState(raw: unknown): FitLifeState {
       upsertedCustomMeals: Array.isArray(rawPending.upsertedCustomMeals) ? rawPending.upsertedCustomMeals : [],
       deletedCustomMealIds: Array.isArray(rawPending.deletedCustomMealIds) ? rawPending.deletedCustomMealIds : [],
       dirtyWorkoutDays: Array.isArray(rawPending.dirtyWorkoutDays) ? rawPending.dirtyWorkoutDays : [],
+      syncAllWorkouts: Boolean(rawPending.syncAllWorkouts),
     },
   };
 }

@@ -204,11 +204,23 @@ export async function flushPendingOpsToCloud(state: FitLifeState): Promise<FitLi
     }
   }
 
-  // 8. Dirty workout days
-  const uniqueDays = Array.from(new Set(ops.dirtyWorkoutDays)).filter((d) =>
-    [0, 1, 2].includes(d)
-  );
-  for (const dayIdx of uniqueDays) {
+  // 8. Dirty workout days or full workout schedule structure change
+  if (ops.syncAllWorkouts) {
+    const { error: pruneErr } = await supabase
+      .from('workout_logs')
+      .delete()
+      .eq('profile_id', profileId)
+      .gte('day_index', state.workouts.length);
+    if (pruneErr) throw pruneErr;
+  }
+
+  const targetDayIndices = ops.syncAllWorkouts
+    ? state.workouts.map((_, idx) => idx)
+    : Array.from(new Set(ops.dirtyWorkoutDays)).filter(
+        (d) => Number.isInteger(d) && d >= 0 && d < state.workouts.length
+      );
+
+  for (const dayIdx of targetDayIndices) {
     const dayObj = state.workouts[dayIdx];
     if (!dayObj) continue;
 
@@ -359,18 +371,23 @@ export async function loadCloudSnapshotBySyncCode(
     isCustom: true,
   }));
 
-  const workouts: WorkoutDay[] = cloneDefaultWorkouts();
-  for (const row of workoutsRes.data || []) {
-    if ([0, 1, 2].includes(row.day_index) && row.workout_state) {
-      const ws = row.workout_state as Partial<WorkoutDay>;
-      const fallback = DEFAULT_WORKOUTS[row.day_index];
-      workouts[row.day_index] = {
-        dayName: ws.dayName || fallback.dayName,
-        focus: ws.focus || fallback.focus,
-        completedAt: row.completed_at || ws.completedAt || null,
-        exercises: Array.isArray(ws.exercises) ? ws.exercises : fallback.exercises,
-      };
-    }
+  let workouts: WorkoutDay[] = cloneDefaultWorkouts();
+  const workoutRows = (workoutsRes.data || []).filter(
+    (row) => Number.isInteger(row.day_index) && row.day_index >= 0 && row.workout_state
+  );
+  if (workoutRows.length > 0) {
+    workouts = workoutRows
+      .sort((a, b) => a.day_index - b.day_index)
+      .map((row, idx) => {
+        const ws = row.workout_state as Partial<WorkoutDay>;
+        const fallback = DEFAULT_WORKOUTS[idx % DEFAULT_WORKOUTS.length];
+        return {
+          dayName: ws.dayName || `วันที่ ${idx + 1}`,
+          focus: ws.focus || fallback.focus,
+          completedAt: row.completed_at || ws.completedAt || null,
+          exercises: Array.isArray(ws.exercises) ? ws.exercises : [],
+        };
+      });
   }
 
   const today = getLocalDateString();
